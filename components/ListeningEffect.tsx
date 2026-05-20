@@ -38,7 +38,7 @@ export function ListeningEffect({ isActive = false }: ListeningEffectProps) {
       initial={{ opacity: 0 }}
       animate={{ opacity: isActive ? 1 : 0 }}
       transition={{ duration: 0.3 }}
-      pointer-events="none"
+      style={{ pointerEvents: 'none' }}
     >
       {/* Expanding pulses */}
       {[0, 1, 2].map((i) => (

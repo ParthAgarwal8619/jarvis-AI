@@ -29,12 +29,10 @@ export default function JarvisInterface() {
   const handleVoiceSubmit = useCallback(async () => {
     if (voice.transcript.trim()) {
       try {
-        console.log('[v0] User said:', voice.transcript)
         setOrbState('active')
 
         const result = await conversation.sendMessage(voice.transcript)
 
-        console.log('[v0] AI Response received, synthesizing audio...')
         setSearchResults(result.searchResults || [])
 
         // Synthesize speech
@@ -87,7 +85,6 @@ export default function JarvisInterface() {
         setOrbState('active')
 
         const result = await conversation.sendMessage(message)
-        console.log('[v0] AI Response received, synthesizing audio...')
         setSearchResults(result.searchResults || [])
 
         // Synthesize speech
