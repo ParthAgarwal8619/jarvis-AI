@@ -46,15 +46,18 @@ export default function JarvisInterface() {
           if (audioResponse.ok) {
             const audioBuffer = await audioResponse.arrayBuffer()
             voice.playAudio(audioBuffer)
+          } else {
+            console.warn('[v0] Audio synthesis failed:', audioResponse.statusText)
           }
         } catch (error) {
-          console.error('[v0] Audio synthesis error:', error)
-          setOrbState('idle')
+          console.warn('[v0] Audio synthesis error:', error)
+          // Continue without audio if synthesis fails
         }
 
         voice.clearTranscript()
+        setOrbState('idle')
       } catch (error) {
-        console.error('[v0] Error processing voice:', error)
+        // Error is handled by conversation hook and displayed to user
         setOrbState('idle')
       }
     }
@@ -98,13 +101,17 @@ export default function JarvisInterface() {
           if (audioResponse.ok) {
             const audioBuffer = await audioResponse.arrayBuffer()
             voice.playAudio(audioBuffer)
+          } else {
+            console.warn('[v0] Audio synthesis failed:', audioResponse.statusText)
           }
         } catch (error) {
-          console.error('[v0] Audio synthesis error:', error)
-          setOrbState('idle')
+          console.warn('[v0] Audio synthesis error:', error)
+          // Continue without audio if synthesis fails
         }
+        
+        setOrbState('idle')
       } catch (error) {
-        console.error('[v0] Error processing message:', error)
+        // Error is handled by conversation hook and displayed to user
         setOrbState('idle')
       }
     },
@@ -223,9 +230,19 @@ export default function JarvisInterface() {
 
       {/* Error message */}
       {(voice.error || conversation.error) && (
-        <HologramPanel isVisible={true} title="ERROR">
-          <p className="text-red-300 text-sm font-mono">{voice.error || conversation.error}</p>
-        </HologramPanel>
+        <div className="fixed bottom-4 left-4 right-4 max-w-md mx-auto z-50 p-4 rounded border border-red-500/50 bg-red-950/80 backdrop-blur">
+          <div className="flex items-start gap-3">
+            <div className="flex-shrink-0">
+              <span className="text-red-400 font-bold">⚠</span>
+            </div>
+            <div className="flex-1">
+              <p className="text-red-300 text-sm font-mono leading-relaxed">{voice.error || conversation.error}</p>
+              {conversation.error?.includes('quota') && (
+                <p className="text-red-400/70 text-xs mt-2 font-mono">Please check your OpenAI API key and billing.</p>
+              )}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

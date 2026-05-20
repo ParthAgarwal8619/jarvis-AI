@@ -66,7 +66,9 @@ export function useConversation(options?: UseConversationOptions) {
         })
 
         if (!response.ok) {
-          throw new Error(`Chat API error: ${response.statusText}`)
+          const errorData = await response.json().catch(() => ({}))
+          const errorMessage = errorData.error || response.statusText
+          throw new Error(errorMessage)
         }
 
         const data = await response.json()
@@ -84,7 +86,6 @@ export function useConversation(options?: UseConversationOptions) {
         }
       } catch (err) {
         const errorMsg = err instanceof Error ? err.message : 'Failed to send message'
-        console.error('[Conversation] Error:', errorMsg)
         setError(errorMsg)
         options?.onError?.(errorMsg)
         setIsLoading(false)

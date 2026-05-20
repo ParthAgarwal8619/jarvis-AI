@@ -59,9 +59,30 @@ export async function POST(request: NextRequest) {
     })
   } catch (error) {
     console.error('Chat API error:', error)
+    
+    let errorMessage = 'Failed to process chat request'
+    let statusCode = 500
+
+    if (error instanceof Error) {
+      const errorStr = error.message.toLowerCase()
+      
+      if (errorStr.includes('insufficient_quota') || errorStr.includes('quota')) {
+        errorMessage = 'OpenAI API quota exceeded. Please check your API key and billing details.'
+        statusCode = 429
+      } else if (errorStr.includes('invalid_api_key') || errorStr.includes('authentication')) {
+        errorMessage = 'Invalid OpenAI API key. Please check your configuration.'
+        statusCode = 401
+      } else if (errorStr.includes('rate limit')) {
+        errorMessage = 'Rate limit exceeded. Please try again later.'
+        statusCode = 429
+      } else {
+        errorMessage = error.message
+      }
+    }
+
     return NextResponse.json(
-      { error: 'Failed to process chat request' },
-      { status: 500 }
+      { error: errorMessage },
+      { status: statusCode }
     )
   }
 }
