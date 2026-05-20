@@ -4,14 +4,14 @@ Your JARVIS AI Assistant is built and running! To fully activate all features, y
 
 ## Required Environment Variables
 
-### 1. **OpenAI API Key** (Required for AI responses)
-- **Key**: `OPENAI_API_KEY`
-- **Purpose**: Powers the intelligent AI responses using GPT-4o-mini
+### 1. **Grow API Key** (Required for AI responses)
+- **Key**: `GROW_API_KEY`
+- **Purpose**: Powers the intelligent AI responses using Grow's API
 - **How to get it**:
-  1. Go to https://platform.openai.com/account/api-keys
-  2. Create a new API key
-  3. Copy the key and add it to your environment variables
-- **Status**: Currently will fail with "quota exceeded" if key is missing or expired
+  1. Contact your Grow API provider to get your access token
+  2. Copy the token/key
+  3. Add it to your environment variables as `GROW_API_KEY`
+- **Status**: Required for all AI chat functionality
 
 ### 2. **ElevenLabs API Key** (Required for voice synthesis)
 - **Key**: `ELEVENLABS_API_KEY`
@@ -63,7 +63,7 @@ Your JARVIS AI Assistant is built and running! To fully activate all features, y
 
 ### Locally (.env.local)
 ```env
-OPENAI_API_KEY=sk_...
+GROW_API_KEY=your_grow_api_token_here
 ELEVENLABS_API_KEY=sk_...
 SEARCHAPI_API_KEY=...
 PORCUPINE_ACCESS_KEY=...
@@ -81,7 +81,7 @@ Once configured, JARVIS will have:
 - Get voice responses with natural-sounding synthesis
 
 ### AI Responses
-- Intelligent, context-aware replies using GPT-4o-mini
+- Intelligent, context-aware replies using Grow API
 - Maintains conversation history across sessions
 - Learns from your preferences
 

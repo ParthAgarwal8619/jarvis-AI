@@ -17,7 +17,7 @@ A complete full-stack AI assistant application with:
 - **Text Input Interface**: Alternative text-based input with visual feedback
 
 ### Backend API Routes
-- `/api/chat` - Handles chat messages with OpenAI GPT-4o-mini, optional web search integration
+- `/api/chat` - Handles chat messages with Grow API, optional web search integration
 - `/api/voice` - Converts text to speech using ElevenLabs
 - `/api/search` - Real-time web search using SearchAPI for current information
 - `/api/wakeword` - Health check for Porcupine wake word detection
@@ -29,7 +29,7 @@ A complete full-stack AI assistant application with:
 - **Audio Playback**: Automatic playback of synthesized voice responses
 
 ### AI & Search Integration
-- **OpenAI GPT-4o-mini**: Advanced language model for intelligent conversations
+- **Grow API**: Advanced language model for intelligent conversations
 - **Real-time Web Search**: SearchAPI integration for current news, weather, and information
 - **Context-Aware Responses**: Maintains conversation history for coherent multi-turn dialogs
 - **Search Result Display**: Shows search results as cards within the interface
@@ -72,7 +72,7 @@ A complete full-stack AI assistant application with:
 │   ├── useWakeWord.ts          # Wake word detection
 │   └── useConversation.ts      # Chat state and API calls
 ├── lib/
-│   ├── openai.ts               # OpenAI integration
+│   ├── grow.ts                 # Grow API integration
 │   ├── elevenlabs.ts           # ElevenLabs voice synthesis
 │   ├── searchapi.ts            # SearchAPI integration
 │   ├── supabase.ts             # Database operations

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { chat, extractSearchQuery } from '@/lib/openai'
-import { searchWeb, summarizeSearchResults } from '@/lib/searchapi'
+import { chatWithGrow, extractSearchQuery } from '@/lib/grow'
+import { searchWeb } from '@/lib/searchapi'
 
 export const runtime = 'nodejs'
 
@@ -18,37 +18,53 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'No messages provided' }, { status: 400 })
     }
 
-    // First, get the AI response
-    const { text, needsSearch } = await chat(messages)
+    // Get the last user message
+    const lastMessage = messages[messages.length - 1]?.content || ''
 
-    let finalResponse = text
+    // First, get the AI response
+    const { response: aiResponse, searchQuery } = await chatWithGrow(lastMessage, messages.slice(0, -1) as any)
+
+    let finalResponse = aiResponse
     let searchResults = null
     let usedSearch = false
 
-    // If search is needed, perform search and get augmented response
-    if (needsSearch) {
-      const searchQuery = extractSearchQuery(text)
-      console.log('[Chat] Search needed for query:', searchQuery)
+    // If search query is detected, perform web search
+    if (searchQuery) {
+      try {
+        const results = await searchWeb(searchQuery)
 
-      const results = await searchWeb(searchQuery)
+        if (results.length > 0) {
+          // Format search results for context
+          const searchContext = results
+            .slice(0, 3)
+            .map((r) => `${r.title}\n${r.snippet}\nURL: ${r.link}`)
+            .join('\n\n')
 
-      if (results.length > 0) {
-        const searchSummary = await summarizeSearchResults(results, searchQuery)
+          // Get refined response with search context
+          const refinedMessages = [
+            ...messages,
+            {
+              role: 'assistant' as const,
+              content: aiResponse,
+            },
+            {
+              role: 'user' as const,
+              content: `I found this additional information that might help:\n\n${searchContext}\n\nPlease provide an updated response incorporating this information if relevant.`,
+            },
+          ]
 
-        // Get a new response with search context
-        const augmentedMessages = [
-          ...messages,
-          { role: 'assistant' as const, content: text },
-          {
-            role: 'user' as const,
-            content: `I found this information. Please incorporate it into your response:\n\n${searchSummary}`,
-          },
-        ]
+          const { response: refinedResponse } = await chatWithGrow(
+            refinedMessages[refinedMessages.length - 1].content,
+            refinedMessages.slice(0, -1) as any
+          )
 
-        const { text: augmentedResponse } = await chat(augmentedMessages, searchSummary)
-        finalResponse = augmentedResponse
-        searchResults = results
-        usedSearch = true
+          finalResponse = refinedResponse
+          searchResults = results
+          usedSearch = true
+        }
+      } catch (searchError) {
+        console.warn('[Chat] Search failed, continuing without search results:', searchError)
+        // Continue with original response if search fails
       }
     }
 
@@ -59,20 +75,23 @@ export async function POST(request: NextRequest) {
     })
   } catch (error) {
     console.error('Chat API error:', error)
-    
+
     let errorMessage = 'Failed to process chat request'
     let statusCode = 500
 
     if (error instanceof Error) {
       const errorStr = error.message.toLowerCase()
-      
-      if (errorStr.includes('insufficient_quota') || errorStr.includes('quota')) {
-        errorMessage = 'OpenAI API quota exceeded. Please check your API key and billing details.'
+
+      if (errorStr.includes('quota')) {
+        errorMessage = 'Grow API quota exceeded. Please check your account.'
         statusCode = 429
-      } else if (errorStr.includes('invalid_api_key') || errorStr.includes('authentication')) {
-        errorMessage = 'Invalid OpenAI API key. Please check your configuration.'
+      } else if (errorStr.includes('invalid') && errorStr.includes('key')) {
+        errorMessage = 'Invalid Grow API key. Please check your configuration.'
         statusCode = 401
-      } else if (errorStr.includes('rate limit')) {
+      } else if (errorStr.includes('unauthorized')) {
+        errorMessage = 'Grow API authentication failed. Please verify your API key.'
+        statusCode = 401
+      } else if (errorStr.includes('rate')) {
         errorMessage = 'Rate limit exceeded. Please try again later.'
         statusCode = 429
       } else {
@@ -80,9 +99,6 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    return NextResponse.json(
-      { error: errorMessage },
-      { status: statusCode }
-    )
+    return NextResponse.json({ error: errorMessage }, { status: statusCode })
   }
 }
