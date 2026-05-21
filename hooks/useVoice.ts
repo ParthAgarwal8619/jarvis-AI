@@ -70,33 +70,45 @@ export function useVoice(options?: UseVoiceOptions) {
   const startListening = useCallback(async () => {
     try {
       setError(null)
+      setIsListening(true)
 
-      // Request microphone access
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      // Try to request microphone access, but don't fail if denied
+      let stream: MediaStream | null = null
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+        
+        // Start recording if we got access
+        const mediaRecorder = new MediaRecorder(stream)
+        audioChunksRef.current = []
 
+        mediaRecorder.ondataavailable = (event) => {
+          audioChunksRef.current.push(event.data)
+        }
+
+        mediaRecorder.onstart = () => {
+          console.log('[Voice] Recording started')
+        }
+
+        mediaRecorderRef.current = mediaRecorder
+        mediaRecorder.start()
+      } catch (micError) {
+        // Microphone access denied or unavailable - continue with speech recognition only
+        console.warn('[Voice] Microphone not available:', micError instanceof Error ? micError.message : 'Permission denied')
+      }
+
+      // Always try to start Web Speech API recognition
       if (recognitionRef.current) {
         recognitionRef.current.start()
+      } else {
+        // If Speech Recognition not available, show user a message but don't error
+        const msg = 'Voice input not fully available. You can still type messages.'
+        setError(msg)
+        options?.onError?.(msg)
       }
-
-      // Also start recording for fallback
-      const mediaRecorder = new MediaRecorder(stream)
-      audioChunksRef.current = []
-
-      mediaRecorder.ondataavailable = (event) => {
-        audioChunksRef.current.push(event.data)
-      }
-
-      mediaRecorder.onstart = () => {
-        console.log('[Voice] Recording started')
-        setIsListening(true)
-      }
-
-      mediaRecorderRef.current = mediaRecorder
-      mediaRecorder.start()
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : 'Microphone access denied'
-      console.error('[Voice] Microphone error:', errorMsg)
-      setError(errorMsg)
+      const errorMsg = err instanceof Error ? err.message : 'Voice input unavailable'
+      console.warn('[Voice] Starting listening with limited features:', errorMsg)
+      // Don't fully error out - just show warning
       options?.onError?.(errorMsg)
       setIsListening(false)
     }
