@@ -51,14 +51,11 @@ export function useVoiceAssistant(options: UseVoiceAssistantOptions = {}) {
 
         const fullTranscript = finalTranscript || interimTranscript
         setTranscript(fullTranscript)
-        console.log('[v0] Speech transcript received:', { finalTranscript, interimTranscript, isFinal: !interimTranscript })
-        
         options.onTranscript?.(fullTranscript)
       }
 
       // Handle speech recognition start
       recognitionRef.current.onstart = () => {
-        console.log('[v0] Microphone started - Listening')
         setState('listening')
         setError('')
         setTranscript('')
@@ -67,7 +64,6 @@ export function useVoiceAssistant(options: UseVoiceAssistantOptions = {}) {
 
       // Handle speech recognition end
       recognitionRef.current.onend = () => {
-        console.log('[v0] Microphone stopped')
         if (state === 'listening' && transcript) {
           setState('processing')
           options.onStateChange?.('processing')
@@ -80,7 +76,6 @@ export function useVoiceAssistant(options: UseVoiceAssistantOptions = {}) {
       // Handle speech recognition errors
       recognitionRef.current.onerror = (event: any) => {
         const errorMessage = getErrorMessage(event.error)
-        console.error('[v0] Speech recognition error:', { error: event.error, message: errorMessage })
         setError(errorMessage)
         setState('idle')
         options.onStateChange?.('idle')
@@ -104,33 +99,15 @@ export function useVoiceAssistant(options: UseVoiceAssistantOptions = {}) {
       return
     }
 
-    // Request microphone permission
-    navigator.mediaDevices.getUserMedia({ audio: true }).then((stream) => {
-      console.log('[v0] Microphone permission granted')
-      stream.getTracks().forEach((track) => track.stop()) // Stop the stream, we just needed permission
-
-      try {
-        recognitionRef.current.start()
-        console.log('[v0] Starting speech recognition')
-      } catch (err) {
-        console.error('[v0] Failed to start recognition:', err)
-        const msg = 'Failed to start microphone'
-        setError(msg)
-        options.onError?.(msg)
-      }
-    }).catch((err) => {
-      const errorMsg = err.name === 'NotAllowedError' 
-        ? 'Microphone access denied'
-        : err.name === 'NotFoundError'
-        ? 'No microphone found'
-        : 'Microphone unavailable'
-
-      // Silently handle microphone errors - don't spam console
-      setError(errorMsg)
-      setState('idle')
-      options.onStateChange?.('idle')
-      options.onError?.(errorMsg)
-    })
+    try {
+      // Start speech recognition directly - no separate microphone permission needed
+      recognitionRef.current.start()
+    } catch (err) {
+      console.error('[v0] Failed to start recognition:', err)
+      const msg = 'Failed to start voice input'
+      setError(msg)
+      options.onError?.(msg)
+    }
   }, [isSupported, options])
 
   const stopListening = useCallback(() => {
@@ -158,7 +135,6 @@ export function useVoiceAssistant(options: UseVoiceAssistantOptions = {}) {
       setState('idle')
       options.onStateChange?.('idle')
     } catch (err) {
-      console.error('[v0] Audio playback error:', err)
       setState('idle')
       options.onStateChange?.('idle')
     }
@@ -171,7 +147,6 @@ export function useVoiceAssistant(options: UseVoiceAssistantOptions = {}) {
       try {
         setState('processing')
         options.onStateChange?.('processing')
-        console.log('[v0] Sending transcript to AI:', text)
 
         const response = await fetch('/api/chat', {
           method: 'POST',
@@ -188,11 +163,9 @@ export function useVoiceAssistant(options: UseVoiceAssistantOptions = {}) {
 
         const data = await response.json()
         const aiResponse = data.response
-        console.log('[v0] GPT response received:', aiResponse)
         options.onResponse?.(aiResponse)
 
         // Get voice response
-        console.log('[v0] Requesting ElevenLabs audio synthesis')
         const voiceResponse = await fetch('/api/voice', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -201,16 +174,13 @@ export function useVoiceAssistant(options: UseVoiceAssistantOptions = {}) {
 
         if (voiceResponse.ok) {
           const audioBuffer = await voiceResponse.arrayBuffer()
-          console.log('[v0] ElevenLabs audio generated, playing...')
           await playAudio(audioBuffer)
         } else {
-          console.warn('[v0] Failed to generate voice response, showing text only')
           setState('idle')
           options.onStateChange?.('idle')
         }
       } catch (err) {
         const errorMsg = err instanceof Error ? err.message : 'Failed to process voice command'
-        console.error('[v0] AI response error:', errorMsg)
         setError(errorMsg)
         setState('idle')
         options.onStateChange?.('idle')
