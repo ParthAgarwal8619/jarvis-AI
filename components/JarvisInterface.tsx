@@ -6,18 +6,32 @@ import { VoiceWave } from './VoiceWave'
 import { ChatWindow } from './ChatWindow'
 import { HologramPanel } from './HologramPanel'
 import { SearchCard } from './SearchCard'
-import { useVoice } from '@/hooks/useVoice'
+import { useVoiceAssistant } from '@/hooks/useVoiceAssistant'
 import { useConversation } from '@/hooks/useConversation'
 import type { SearchResult } from '@/lib/searchapi'
 
-type OrbState = 'idle' | 'speaking' | 'active'
+type OrbState = 'idle' | 'listening' | 'processing' | 'speaking' | 'active'
 
 export default function JarvisInterface() {
   const [orbState, setOrbState] = useState<OrbState>('idle')
   const [searchResults, setSearchResults] = useState<SearchResult[]>([])
   const [textInput, setTextInput] = useState('')
+  const [showError, setShowError] = useState(false)
+  const [errorMessage, setErrorMessage] = useState('')
 
-  const voice = useVoice()
+  const voiceAssistant = useVoiceAssistant({
+    onStateChange: (state) => setOrbState(state),
+    onError: (error) => {
+      setErrorMessage(error)
+      setShowError(true)
+      setTimeout(() => setShowError(false), 5000)
+    },
+    onTranscript: (text) => setTextInput(text),
+    onResponse: (response) => {
+      conversation.addMessage({ role: 'assistant', content: response })
+    },
+  })
+
   const conversation = useConversation()
 
   // Handle text input submission
@@ -27,7 +41,7 @@ export default function JarvisInterface() {
       if (!msg) return
 
       try {
-        setOrbState('active')
+        setOrbState('processing')
         setTextInput('')
 
         const result = await conversation.sendMessage(msg)
@@ -42,31 +56,37 @@ export default function JarvisInterface() {
           })
 
           if (audioResponse.ok) {
+            setOrbState('speaking')
             const audioBuffer = await audioResponse.arrayBuffer()
-            await voice.playAudio(audioBuffer)
+            await voiceAssistant.playAudio(audioBuffer)
           }
         } catch (error) {
-          // Voice is optional - silently fail
+          console.error('[v0] Voice synthesis error:', error)
         }
 
         setOrbState('idle')
       } catch (error) {
+        console.error('[v0] Text submission error:', error)
+        setErrorMessage(error instanceof Error ? error.message : 'Failed to process message')
+        setShowError(true)
         setOrbState('idle')
       }
     },
-    [conversation, voice, textInput]
+    [conversation, voiceAssistant, textInput]
   )
 
-  // Update orb state based on voice state
-  useEffect(() => {
-    if (voice.isSpeaking) {
-      setOrbState('speaking')
-    } else if (conversation.isLoading) {
-      setOrbState('active')
-    } else {
-      setOrbState('idle')
+  // Handle orb click for voice input
+  const handleOrbClick = useCallback(() => {
+    if (voiceAssistant.state === 'idle' && voiceAssistant.isSupported) {
+      voiceAssistant.startListening()
+    } else if (voiceAssistant.state === 'listening') {
+      voiceAssistant.stopListening()
+      // Auto-send transcript when done listening
+      if (voiceAssistant.transcript.trim()) {
+        voiceAssistant.sendTranscriptToAI(voiceAssistant.transcript)
+      }
     }
-  }, [voice.isSpeaking, conversation.isLoading])
+  }, [voiceAssistant])
 
   return (
     <div className="relative w-full h-screen flex flex-col items-center justify-center gap-8 p-4">
@@ -96,18 +116,22 @@ export default function JarvisInterface() {
         {/* Central orb section */}
         <div className="relative flex flex-col items-center gap-6">
           <div className="relative">
-            <JarvisOrb state={orbState} onClick={() => {}} />
+            <JarvisOrb state={orbState} onClick={handleOrbClick} />
           </div>
 
           {/* Voice wave visualization */}
-          <VoiceWave isActive={voice.isSpeaking} audioLevel={voice.isSpeaking ? 50 : 0} />
+          <VoiceWave isActive={orbState === 'listening' || orbState === 'speaking'} audioLevel={orbState === 'listening' ? 70 : orbState === 'speaking' ? 50 : 0} />
 
           {/* Status text */}
           <div className="text-center text-xs font-mono text-cyan-300 h-4">
-            {voice.isSpeaking && <span>Playing response...</span>}
-            {conversation.isLoading && <span>Processing request...</span>}
-            {!voice.isSpeaking && !conversation.isLoading && (
-              <span className="opacity-50">Type a message to begin</span>
+            {orbState === 'listening' && <span>Listening...</span>}
+            {orbState === 'processing' && <span>Processing...</span>}
+            {orbState === 'speaking' && <span>Speaking...</span>}
+            {orbState === 'idle' && voiceAssistant.isSupported && (
+              <span className="opacity-50 cursor-pointer hover:opacity-100">Click orb to speak or type a message</span>
+            )}
+            {!voiceAssistant.isSupported && (
+              <span className="text-amber-400/70">Voice input unavailable - Use text input</span>
             )}
           </div>
         </div>
@@ -181,14 +205,14 @@ export default function JarvisInterface() {
       </div>
 
       {/* Error message */}
-      {(voice.error || conversation.error) && (
+      {(showError || conversation.error) && (
         <div className="fixed bottom-4 left-4 right-4 max-w-md mx-auto z-50 p-4 rounded border border-red-500/50 bg-red-950/80 backdrop-blur">
           <div className="flex items-start gap-3">
             <div className="flex-shrink-0">
               <span className="text-red-400 font-bold">⚠</span>
             </div>
             <div className="flex-1">
-              <p className="text-red-300 text-sm font-mono leading-relaxed">{voice.error || conversation.error}</p>
+              <p className="text-red-300 text-sm font-mono leading-relaxed">{errorMessage || conversation.error}</p>
             </div>
           </div>
         </div>
