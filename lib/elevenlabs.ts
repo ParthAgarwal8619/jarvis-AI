@@ -75,16 +75,14 @@ export async function synthesizeSpeech(text: string): Promise<ArrayBuffer> {
     })
 
     if (!response.ok) {
-      console.warn(`[Voice] ElevenLabs API returned ${response.status}, using demo audio`)
-      // Fallback to demo audio on API error
+      // Silently fallback to demo audio on API error
       return generateDemoAudio()
     }
 
     const buffer = await response.arrayBuffer()
     return buffer
   } catch (error) {
-    console.warn('[Voice] ElevenLabs synthesis error, using demo audio:', error)
-    // Fallback to demo audio on network error
+    // Silently fallback to demo audio on network error
     return generateDemoAudio()
   }
 }

@@ -17,8 +17,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'No text provided' }, { status: 400 })
     }
 
-    console.log('[Voice API] Synthesizing speech for text:', text.substring(0, 50) + '...')
-
     // Synthesize speech using ElevenLabs
     const audioBuffer = await synthesizeSpeech(text)
 
@@ -30,7 +28,6 @@ export async function POST(request: NextRequest) {
       },
     })
   } catch (error) {
-    console.error('Voice API error:', error)
     // Return a simple silence/demo audio on error instead of failing
     // This allows the app to continue working even without ElevenLabs
     const demoAudioBuffer = new ArrayBuffer(1024)

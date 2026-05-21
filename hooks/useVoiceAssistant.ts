@@ -27,14 +27,6 @@ export function useVoiceAssistant(options: UseVoiceAssistantOptions = {}) {
     const isSecure = window.location.protocol === 'https:' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
     const supported = !!SpeechRecognition && isSecure
 
-    console.log('[v0] Voice Support Check:', {
-      speechRecognition: !!SpeechRecognition,
-      isHTTPS: window.location.protocol === 'https:',
-      isLocalhost: window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1',
-      isSecure,
-      supported,
-    })
-
     setIsSupported(supported)
 
     if (supported) {
@@ -128,12 +120,12 @@ export function useVoiceAssistant(options: UseVoiceAssistantOptions = {}) {
       }
     }).catch((err) => {
       const errorMsg = err.name === 'NotAllowedError' 
-        ? 'Microphone permission denied. Please allow microphone access.'
+        ? 'Microphone access denied'
         : err.name === 'NotFoundError'
-        ? 'No microphone found. Please connect a microphone.'
-        : 'Failed to access microphone'
+        ? 'No microphone found'
+        : 'Microphone unavailable'
 
-      console.error('[v0] Microphone permission error:', { error: err.name, message: errorMsg })
+      // Silently handle microphone errors - don't spam console
       setError(errorMsg)
       setState('idle')
       options.onStateChange?.('idle')
@@ -144,7 +136,6 @@ export function useVoiceAssistant(options: UseVoiceAssistantOptions = {}) {
   const stopListening = useCallback(() => {
     if (recognitionRef.current) {
       recognitionRef.current.stop()
-      console.log('[v0] Stopped speech recognition')
     }
   }, [])
 
@@ -152,7 +143,6 @@ export function useVoiceAssistant(options: UseVoiceAssistantOptions = {}) {
     try {
       setState('speaking')
       options.onStateChange?.('speaking')
-      console.log('[v0] Playing audio response')
 
       const audioContext = new (window as any).AudioContext()
       const audioData = await audioContext.decodeAudioData(audioBuffer)
@@ -165,8 +155,6 @@ export function useVoiceAssistant(options: UseVoiceAssistantOptions = {}) {
       await new Promise((resolve) => {
         source.onended = resolve
       })
-
-      console.log('[v0] Audio playback completed')
       setState('idle')
       options.onStateChange?.('idle')
     } catch (err) {
