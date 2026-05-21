@@ -24,11 +24,14 @@ export function useVoiceAssistant(options: UseVoiceAssistantOptions = {}) {
   // Check browser support
   useEffect(() => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
-    const supported = !!SpeechRecognition && window.location.protocol === 'https:'
+    const isSecure = window.location.protocol === 'https:' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+    const supported = !!SpeechRecognition && isSecure
 
     console.log('[v0] Voice Support Check:', {
       speechRecognition: !!SpeechRecognition,
       isHTTPS: window.location.protocol === 'https:',
+      isLocalhost: window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1',
+      isSecure,
       supported,
     })
 
