@@ -6,91 +6,34 @@ import { VoiceWave } from './VoiceWave'
 import { ChatWindow } from './ChatWindow'
 import { HologramPanel } from './HologramPanel'
 import { SearchCard } from './SearchCard'
-import { ListeningEffect } from './ListeningEffect'
 import { useVoice } from '@/hooks/useVoice'
 import { useConversation } from '@/hooks/useConversation'
 import type { SearchResult } from '@/lib/searchapi'
 
-type OrbState = 'idle' | 'listening' | 'speaking' | 'active'
+type OrbState = 'idle' | 'speaking' | 'active'
 
 export default function JarvisInterface() {
   const [orbState, setOrbState] = useState<OrbState>('idle')
   const [searchResults, setSearchResults] = useState<SearchResult[]>([])
-  const [audioLevel, setAudioLevel] = useState(0)
+  const [textInput, setTextInput] = useState('')
 
-  const voice = useVoice({
-    onSpeakingStart: () => setOrbState('speaking'),
-    onSpeakingEnd: () => setOrbState('idle'),
-  })
-
+  const voice = useVoice()
   const conversation = useConversation()
 
-  // Handle voice input
-  const handleVoiceSubmit = useCallback(async () => {
-    if (voice.transcript.trim()) {
-      try {
-        setOrbState('active')
-
-        const result = await conversation.sendMessage(voice.transcript)
-
-        setSearchResults(result.searchResults || [])
-
-        // Synthesize speech
-        try {
-          const audioResponse = await fetch('/api/voice', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ text: result.response }),
-          })
-
-          if (audioResponse.ok) {
-            const audioBuffer = await audioResponse.arrayBuffer()
-            voice.playAudio(audioBuffer)
-          } else {
-            console.warn('[v0] Audio synthesis failed:', audioResponse.statusText)
-          }
-        } catch (error) {
-          console.warn('[v0] Audio synthesis error:', error)
-          // Continue without audio if synthesis fails
-        }
-
-        voice.clearTranscript()
-        setOrbState('idle')
-      } catch (error) {
-        // Error is handled by conversation hook and displayed to user
-        setOrbState('idle')
-      }
-    }
-  }, [voice, conversation])
-
-  // Handle microphone button click
-  const handleMicClick = useCallback(async () => {
-    if (voice.isListening) {
-      voice.stopListening()
-      setOrbState('idle')
-
-      // Wait a moment for transcription to complete
-      setTimeout(() => {
-        if (voice.transcript.trim()) {
-          handleVoiceSubmit()
-        }
-      }, 500)
-    } else {
-      setOrbState('listening')
-      voice.startListening()
-    }
-  }, [voice, handleVoiceSubmit])
-
-  // Handle text input
+  // Handle text input submission
   const handleTextSubmit = useCallback(
-    async (message: string) => {
+    async (message?: string) => {
+      const msg = message || textInput.trim()
+      if (!msg) return
+
       try {
         setOrbState('active')
+        setTextInput('')
 
-        const result = await conversation.sendMessage(message)
+        const result = await conversation.sendMessage(msg)
         setSearchResults(result.searchResults || [])
 
-        // Synthesize speech
+        // Synthesize and play speech
         try {
           const audioResponse = await fetch('/api/voice', {
             method: 'POST',
@@ -100,36 +43,30 @@ export default function JarvisInterface() {
 
           if (audioResponse.ok) {
             const audioBuffer = await audioResponse.arrayBuffer()
-            voice.playAudio(audioBuffer)
-          } else {
-            console.warn('[v0] Audio synthesis failed:', audioResponse.statusText)
+            await voice.playAudio(audioBuffer)
           }
         } catch (error) {
-          console.warn('[v0] Audio synthesis error:', error)
-          // Continue without audio if synthesis fails
+          // Voice is optional - silently fail
         }
-        
+
         setOrbState('idle')
       } catch (error) {
-        // Error is handled by conversation hook and displayed to user
         setOrbState('idle')
       }
     },
-    [conversation, voice]
+    [conversation, voice, textInput]
   )
 
   // Update orb state based on voice state
   useEffect(() => {
     if (voice.isSpeaking) {
       setOrbState('speaking')
-    } else if (voice.isListening) {
-      setOrbState('listening')
     } else if (conversation.isLoading) {
       setOrbState('active')
     } else {
       setOrbState('idle')
     }
-  }, [voice.isSpeaking, voice.isListening, conversation.isLoading])
+  }, [voice.isSpeaking, conversation.isLoading])
 
   return (
     <div className="relative w-full h-screen flex flex-col items-center justify-center gap-8 p-4">
@@ -159,20 +96,18 @@ export default function JarvisInterface() {
         {/* Central orb section */}
         <div className="relative flex flex-col items-center gap-6">
           <div className="relative">
-            <JarvisOrb state={orbState} onClick={handleMicClick} />
-            <ListeningEffect isActive={voice.isListening} />
+            <JarvisOrb state={orbState} onClick={() => {}} />
           </div>
 
           {/* Voice wave visualization */}
-          <VoiceWave isActive={voice.isListening || voice.isSpeaking} audioLevel={audioLevel} />
+          <VoiceWave isActive={voice.isSpeaking} audioLevel={voice.isSpeaking ? 50 : 0} />
 
-          {/* Microphone status */}
+          {/* Status text */}
           <div className="text-center text-xs font-mono text-cyan-300 h-4">
-            {voice.isListening && <span>Listening for voice input...</span>}
             {voice.isSpeaking && <span>Playing response...</span>}
             {conversation.isLoading && <span>Processing request...</span>}
-            {!voice.isListening && !voice.isSpeaking && !conversation.isLoading && (
-              <span className="opacity-50">Click orb or say "Hey Jarvis" to begin</span>
+            {!voice.isSpeaking && !conversation.isLoading && (
+              <span className="opacity-50">Type a message to begin</span>
             )}
           </div>
         </div>
@@ -194,7 +129,7 @@ export default function JarvisInterface() {
             )}
 
             {/* Quick actions */}
-            <HologramPanel title="QUICK ACTIONS" isVisible={!voice.isListening}>
+            <HologramPanel title="QUICK ACTIONS" isVisible={true}>
               <div className="space-y-2">
                 <button
                   onClick={() => handleTextSubmit("What's the current weather?")}
@@ -224,7 +159,24 @@ export default function JarvisInterface() {
 
         {/* Text input area */}
         <div className="w-full max-w-2xl">
-          <TextInputPanel onSubmit={handleTextSubmit} isLoading={conversation.isLoading} />
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={textInput}
+              onChange={(e) => setTextInput(e.target.value)}
+              onKeyPress={(e) => e.key === 'Enter' && handleTextSubmit()}
+              placeholder="Type your message..."
+              className="flex-1 px-4 py-2 font-mono text-sm rounded border border-cyan-400/50 bg-slate-900/50 text-cyan-100 placeholder-cyan-600 focus:outline-none focus:border-cyan-300 focus:bg-slate-900/80 transition-colors"
+              disabled={conversation.isLoading}
+            />
+            <button
+              onClick={() => handleTextSubmit()}
+              disabled={conversation.isLoading || !textInput.trim()}
+              className="px-6 py-2 font-mono text-sm rounded border border-cyan-400/50 bg-cyan-900/40 hover:bg-cyan-900/60 disabled:opacity-50 disabled:cursor-not-allowed text-cyan-300 hover:text-cyan-100 transition-colors"
+            >
+              Send
+            </button>
+          </div>
         </div>
       </div>
 
@@ -237,54 +189,10 @@ export default function JarvisInterface() {
             </div>
             <div className="flex-1">
               <p className="text-red-300 text-sm font-mono leading-relaxed">{voice.error || conversation.error}</p>
-              {conversation.error?.includes('quota') && (
-                <p className="text-red-400/70 text-xs mt-2 font-mono">Please check your OpenAI API key and billing.</p>
-              )}
             </div>
           </div>
         </div>
       )}
     </div>
-  )
-}
-
-// Text input component
-function TextInputPanel({
-  onSubmit,
-  isLoading,
-}: {
-  onSubmit: (message: string) => void
-  isLoading: boolean
-}) {
-  const [input, setInput] = useState('')
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    if (input.trim() && !isLoading) {
-      onSubmit(input)
-      setInput('')
-    }
-  }
-
-  return (
-    <HologramPanel title="TEXT INPUT">
-      <form onSubmit={handleSubmit} className="flex gap-2">
-        <input
-          type="text"
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder="Ask JARVIS anything..."
-          disabled={isLoading}
-          className="flex-1 bg-black/50 border border-cyan-400/30 rounded px-3 py-2 text-sm font-mono text-cyan-100 placeholder-cyan-500/50 focus:outline-none focus:border-cyan-400 disabled:opacity-50 transition-colors"
-        />
-        <button
-          type="submit"
-          disabled={isLoading || !input.trim()}
-          className="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 disabled:bg-cyan-900/50 text-white font-mono text-sm rounded transition-colors duration-200"
-        >
-          {isLoading ? 'Processing...' : 'Send'}
-        </button>
-      </form>
-    </HologramPanel>
   )
 }
