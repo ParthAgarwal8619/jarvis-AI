@@ -54,9 +54,13 @@ export function useVoice(options?: UseVoiceOptions) {
       }
 
       recognitionRef.current.onerror = (event: any) => {
-        console.error('[Voice] Recognition error:', event.error)
-        setError(event.error)
-        options?.onError?.(event.error)
+        // Don't show "not-allowed" errors as they spam the console when microphone is denied
+        // Instead silently handle them
+        if (event.error !== 'not-allowed') {
+          console.error('[Voice] Recognition error:', event.error)
+          setError(event.error)
+          options?.onError?.(event.error)
+        }
         setIsListening(false)
       }
 
@@ -93,7 +97,7 @@ export function useVoice(options?: UseVoiceOptions) {
         mediaRecorder.start()
       } catch (micError) {
         // Microphone access denied or unavailable - continue with speech recognition only
-        console.warn('[Voice] Microphone not available:', micError instanceof Error ? micError.message : 'Permission denied')
+        // Silently continue - user can still type messages
       }
 
       // Always try to start Web Speech API recognition

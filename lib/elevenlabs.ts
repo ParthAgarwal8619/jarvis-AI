@@ -2,90 +2,59 @@
 export const JARVIS_VOICE_ID = 'BZe5a8p64FSrqTsqdlf5'
 const ELEVENLABS_API_KEY = process.env.ELEVENLABS_API_KEY || ''
 
-// Generate a simple beep sound as demo audio (when API key is unavailable)
+// Generate a minimal WAV file with silence as demo audio (works on server)
 function generateDemoAudio(): ArrayBuffer {
-  const audioContext = new (typeof window !== 'undefined' ? window.AudioContext : (global as any).AudioContext)()
-  const sampleRate = audioContext.sampleRate
-  const duration = 0.5
-  const frequency = 800
-  const buffer = audioContext.createBuffer(1, sampleRate * duration, sampleRate)
-  const channelData = buffer.getChannelData(0)
+  const sampleRate = 24000
+  const duration = 0.5 // 500ms
+  const numSamples = Math.floor(sampleRate * duration)
+  const channels = 1
+  const bitsPerSample = 16
 
-  for (let i = 0; i < buffer.length; i++) {
-    channelData[i] = Math.sin((2 * Math.PI * frequency * i) / sampleRate) * 0.3
-  }
+  // WAV file header
+  const header = new ArrayBuffer(44)
+  const headerView = new DataView(header)
+  const audioData = new Uint8Array(numSamples * channels * (bitsPerSample / 8))
 
-  // Convert to WAV format
-  const wav = audioBufferToWav(buffer)
-  return wav
-}
+  // Fill audio data with silence (zeros)
+  audioData.fill(0)
 
-// Convert AudioBuffer to WAV format
-function audioBufferToWav(audioBuffer: AudioBuffer): ArrayBuffer {
-  const numberOfChannels = audioBuffer.numberOfChannels
-  const sampleRate = audioBuffer.sampleRate
-  const format = 1 // PCM
-  const bitDepth = 16
-
-  const bytesPerSample = bitDepth / 8
-  const blockAlign = numberOfChannels * bytesPerSample
-
-  const channelData = []
-  for (let i = 0; i < numberOfChannels; i++) {
-    channelData.push(audioBuffer.getChannelData(i))
-  }
-
-  const interleaved = new Float32Array(audioBuffer.length * numberOfChannels)
-  let offset = 0
-  for (let i = 0; i < audioBuffer.length; i++) {
-    for (let ch = 0; ch < numberOfChannels; ch++) {
-      interleaved[offset++] = channelData[ch][i]
-    }
-  }
-
-  const dataLength = audioBuffer.length * numberOfChannels * bytesPerSample
-  const buffer = new ArrayBuffer(44 + dataLength)
-  const view = new DataView(buffer)
-
-  const writeString = (offset: number, string: string) => {
+  // Write WAV header
+  const writeString = (view: DataView, offset: number, string: string) => {
     for (let i = 0; i < string.length; i++) {
       view.setUint8(offset + i, string.charCodeAt(i))
     }
   }
 
-  writeString(0, 'RIFF')
-  view.setUint32(4, 36 + dataLength, true)
-  writeString(8, 'WAVE')
-  writeString(12, 'fmt ')
-  view.setUint32(16, 16, true)
-  view.setUint16(20, format, true)
-  view.setUint16(22, numberOfChannels, true)
-  view.setUint32(24, sampleRate, true)
-  view.setUint32(28, sampleRate * blockAlign, true)
-  view.setUint16(32, blockAlign, true)
-  view.setUint16(34, bitDepth, true)
-  writeString(36, 'data')
-  view.setUint32(40, dataLength, true)
+  const subchunk2Size = numSamples * channels * (bitsPerSample / 8)
+  const subchunk1Size = 16
+  const chunkSize = 36 + subchunk2Size
 
-  let index = 44
-  const volume = 0.8
-  for (let i = 0; i < interleaved.length; i++) {
-    view.setInt16(index, interleaved[i] < 0 ? interleaved[i] * 0x8000 : interleaved[i] * 0x7fff, true)
-    index += 2
-  }
+  writeString(headerView, 0, 'RIFF')
+  headerView.setUint32(4, chunkSize, true)
+  writeString(headerView, 8, 'WAVE')
+  writeString(headerView, 12, 'fmt ')
+  headerView.setUint32(16, subchunk1Size, true)
+  headerView.setUint16(20, 1, true) // PCM format
+  headerView.setUint16(22, channels, true)
+  headerView.setUint32(24, sampleRate, true)
+  headerView.setUint32(28, sampleRate * channels * (bitsPerSample / 8), true)
+  headerView.setUint16(32, channels * (bitsPerSample / 8), true)
+  headerView.setUint16(34, bitsPerSample, true)
+  writeString(headerView, 36, 'data')
+  headerView.setUint32(40, subchunk2Size, true)
 
-  return buffer
+  // Combine header and audio data
+  const wavFile = new Uint8Array(header.byteLength + audioData.length)
+  wavFile.set(new Uint8Array(header), 0)
+  wavFile.set(audioData, header.byteLength)
+
+  return wavFile.buffer
 }
 
 export async function synthesizeSpeech(text: string): Promise<ArrayBuffer> {
   // If no API key, return demo audio
   if (!ELEVENLABS_API_KEY) {
-    console.log('[Voice] Using demo audio synthesis (no API key configured)')
-    // Return a simple silence buffer that won't cause errors
-    const audioContext = new (typeof window !== 'undefined' ? window.AudioContext : (global as any).AudioContext)()
-    const duration = 0.1
-    const buffer = audioContext.createBuffer(1, audioContext.sampleRate * duration, audioContext.sampleRate)
-    return buffer.getChannelData(0).buffer
+    return generateDemoAudio()
   }
 
   try {
